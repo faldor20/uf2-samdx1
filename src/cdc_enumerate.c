@@ -388,6 +388,10 @@ static void load_serial_number(char serial_number[SERIAL_NUMBER_LENGTH]) {
     uint32_t* addresses[4] = {(uint32_t *) 0x008061FC, (uint32_t *) 0x00806010,
                               (uint32_t *) 0x00806014, (uint32_t *) 0x00806018};
     #endif
+    #ifdef SAML22
+    uint32_t* addresses[4] = {(uint32_t *) 0x0080A00C, (uint32_t *) 0x0080A040,
+                              (uint32_t *) 0x0080A044, (uint32_t *) 0x0080A048};
+    #endif
     uint32_t serial_number_idx = 0;
     for (int i = 0; i < 4; i++) {
         serial_number_idx += writeNum(&(serial_number[serial_number_idx]), *(addresses[i]), true);
@@ -474,6 +478,12 @@ void AT91F_InitUSB(void) {
     #define DP_PIN PIN_PA25H_USB_DP
     #define DP_MUX MUX_PA25H_USB_DP
     #endif
+    #ifdef SAML22
+    #define DM_PIN PIN_PA24G_USB_DM
+    #define DM_MUX MUX_PA24G_USB_DM
+    #define DP_PIN PIN_PA25G_USB_DP
+    #define DP_MUX MUX_PA25G_USB_DP
+    #endif
 
     /* Set up the USB DP/DN pins */
     PORT->Group[0].PINCFG[DM_PIN].bit.PMUXEN = 1;
@@ -494,10 +504,17 @@ void AT91F_InitUSB(void) {
 
     while(GCLK->SYNCBUSY.bit.GENCTRL0) {}
     #endif
+    #ifdef SAML22
+    GCLK->PCHCTRL[USB_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK0_Val | (1 << GCLK_PCHCTRL_CHEN_Pos);
+    MCLK->AHBMASK.bit.USB_ = true;
+    MCLK->APBBMASK.bit.USB_ = true;
+
+    while(GCLK->SYNCBUSY.bit.GENCTRL0) {}
+    #endif
 
     /* Reset */
-    USB->HOST.CTRLA.bit.SWRST = 1;
-    while (USB->HOST.SYNCBUSY.bit.SWRST) {
+    USB->DEVICE.CTRLA.bit.SWRST = 1;
+    while (USB->DEVICE.SYNCBUSY.bit.SWRST) {
         /* Sync wait */
     }
 
@@ -508,7 +525,7 @@ void AT91F_InitUSB(void) {
         pad_transn = 5;
     }
 
-    USB->HOST.PADCAL.bit.TRANSN = pad_transn;
+    USB->DEVICE.PADCAL.bit.TRANSN = pad_transn;
 
     pad_transp = ((*((uint32_t*) USB_FUSES_TRANSP_ADDR)) & USB_FUSES_TRANSP_Msk) >> USB_FUSES_TRANSP_Pos;
 
@@ -516,22 +533,22 @@ void AT91F_InitUSB(void) {
         pad_transp = 29;
     }
 
-    USB->HOST.PADCAL.bit.TRANSP = pad_transp;
+    USB->DEVICE.PADCAL.bit.TRANSP = pad_transp;
     pad_trim = ((*((uint32_t*) USB_FUSES_TRIM_ADDR)) & USB_FUSES_TRIM_Msk) >> USB_FUSES_TRIM_Pos;
 
     if (pad_trim == 0x7) {
         pad_trim = 3;
     }
 
-    USB->HOST.PADCAL.bit.TRIM = pad_trim;
+    USB->DEVICE.PADCAL.bit.TRIM = pad_trim;
 
     /* Set the configuration */
     /* Set mode to Device mode */
-    USB->HOST.CTRLA.bit.MODE = 0;
+    USB->DEVICE.CTRLA.bit.MODE = 0;
     /* Enable Run in Standby */
-    USB->HOST.CTRLA.bit.RUNSTDBY = true;
+    USB->DEVICE.CTRLA.bit.RUNSTDBY = true;
     /* Set the descriptor address */
-    USB->HOST.DESCADD.reg = (uint32_t)(&usb_endpoint_table[0]);
+    USB->DEVICE.DESCADD.reg = (uint32_t)(&usb_endpoint_table[0]);
     /* Set speed configuration to Full speed */
     USB->DEVICE.CTRLB.bit.SPDCONF = USB_DEVICE_CTRLB_SPDCONF_FS_Val;
     /* Attach to the USB host */
@@ -589,7 +606,7 @@ bool USB_Ok() {
 //*----------------------------------------------------------------------------
 uint32_t USB_ReadCore(void *pData, uint32_t length, uint32_t ep, PacketBuffer *cache) {
     uint32_t packetSize = 0;
-    UsbDeviceDescriptor *epdesc = (UsbDeviceDescriptor *)USB->HOST.DESCADD.reg + ep;
+    UsbDeviceDescriptor *epdesc = (UsbDeviceDescriptor *)USB->DEVICE.DESCADD.reg + ep;
 
     if (!cache) {
         cache = &endpointCache[ep];
@@ -673,7 +690,7 @@ uint32_t USB_Write(const void *pData, uint32_t length, uint8_t ep_num) {
 uint32_t USB_WriteCore(const void *pData, uint32_t length, uint8_t ep_num, bool handoverMode) {
     uint32_t data_address;
 
-    UsbDeviceDescriptor *epdesc = (UsbDeviceDescriptor *)USB->HOST.DESCADD.reg + ep_num;
+    UsbDeviceDescriptor *epdesc = (UsbDeviceDescriptor *)USB->DEVICE.DESCADD.reg + ep_num;
 
     if (handoverMode) {
         data_address = (uint32_t)pData;
@@ -1090,7 +1107,7 @@ void usb_init(void) {
 #if USE_CDC
     pCdc.currentConnection = 0;
 #endif
-    USB->HOST.CTRLA.bit.ENABLE = true;
+    USB->DEVICE.CTRLA.bit.ENABLE = true;
 }
 
 #include "usart_sam_ba.h"

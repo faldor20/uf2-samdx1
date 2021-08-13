@@ -246,6 +246,9 @@ void padded_memcpy(char *dst, const char *src, int len);
 #ifdef SAMD51
 #define DBL_TAP_PTR ((volatile uint32_t *)(HSRAM_ADDR + HSRAM_SIZE - 4))
 #endif
+#ifdef SAML22
+#define DBL_TAP_PTR ((volatile uint32_t *)(HSRAM_ADDR + HSRAM_SIZE - 4))
+#endif
 #define DBL_TAP_MAGIC 0xf01669ef // Randomly selected, adjusted to have first and last bit set
 #define DBL_TAP_MAGIC_QUICK_BOOT 0xf02669ef
 
@@ -255,6 +258,9 @@ void padded_memcpy(char *dst, const char *src, int len);
 #endif
 #ifdef SAMD51
 #define SINGLE_RESET() (*((uint32_t *)0x4268) == 0x87eeb07c)
+#endif
+#ifdef SAML22
+#define SINGLE_RESET() (*((uint32_t *)0x20A8) == 0x87eeb07c)
 #endif
 #endif
 

@@ -82,6 +82,8 @@ extern int8_t led_tick_step;
     #define RESET_CONTROLLER PM
 #elif defined(SAMD51)
     #define RESET_CONTROLLER RSTC
+#elif defined(SAML22)
+    #define RESET_CONTROLLER RSTC
 #endif
 
 /**
@@ -193,6 +195,47 @@ int main(void) {
     while(WDT->STATUS.bit.SYNCBUSY) {}
 
 #elif defined(SAMD51)
+    // Disable the watchdog, in case the application set it.
+    WDT->CTRLA.reg = 0;
+    while(WDT->SYNCBUSY.reg) {}
+
+    // Enable 2.7V brownout detection. The default fuse value is 1.7
+    // Set brownout detection to ~2.7V. Default from factory is 1.7V,
+    // which is too low for proper operation of external SPI flash chips (they are 2.7-3.6V).
+    // Also without this higher level, the SAMD51 will write zeros to flash intermittently.
+    // Disable while changing level.
+
+    SUPC->BOD33.bit.ENABLE = 0;
+    while (!SUPC->STATUS.bit.B33SRDY) {}  // Wait for BOD33 to synchronize.
+    SUPC->BOD33.bit.LEVEL = 200;  // 2.7V: 1.5V + LEVEL * 6mV.
+    // Don't reset right now.
+    SUPC->BOD33.bit.ACTION = SUPC_BOD33_ACTION_NONE_Val;
+    SUPC->BOD33.bit.ENABLE = 1; // enable brown-out detection
+
+    // Wait for BOD33 peripheral to be ready.
+    while (!SUPC->STATUS.bit.BOD33RDY) {}
+
+    // Wait for voltage to rise above BOD33 value.
+    while (SUPC->STATUS.bit.BOD33DET) {}
+
+    // If we are starting from a power-on or a brownout,
+    // wait for the voltage to stabilize. Don't do this on an
+    // external reset because it interferes with the timing of double-click.
+    // "BODVDD" means BOD33.
+    if (RSTC->RCAUSE.bit.POR || RSTC->RCAUSE.bit.BODVDD) {
+        do {
+            // Check again in 100ms.
+            delay(100);
+        } while (SUPC->STATUS.bit.BOD33DET);
+    }
+
+    // Now enable reset if voltage falls below minimum.
+    SUPC->BOD33.bit.ENABLE = 0;
+    while (!SUPC->STATUS.bit.B33SRDY) {}  // Wait for BOD33 to synchronize.
+    SUPC->BOD33.bit.ACTION = SUPC_BOD33_ACTION_RESET_Val;
+    SUPC->BOD33.bit.ENABLE = 1;
+
+#elif defined(SAML22)
     // Disable the watchdog, in case the application set it.
     WDT->CTRLA.reg = 0;
     while(WDT->SYNCBUSY.reg) {}
