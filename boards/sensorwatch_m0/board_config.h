@@ -5,14 +5,12 @@
 #define PRODUCT_NAME "Sensor Watch M0"
 #define VOLUME_LABEL "WATCHBOOT"
 #define INDEX_URL "http://oddlyspecific.org/"
-#define BOARD_ID "OSO-SWAT-A1-00"
+#define BOARD_ID "OSO-SWAT-A1"
 
-#define USB_VID 0x239A
-#define USB_PID 0x001B
+#define USB_VID 0x1209
+#define USB_PID 0x2150
 
-// watch is PA20, feather is PA08
 #define LED_PIN PIN_PA20
-// #define LED_PIN PIN_PA08
 
 #define BOOT_USART_MODULE                 SERCOM3
 #define BOOT_USART_BUS_CLOCK_INDEX        MCLK_APBDMASK_SERCOM3
