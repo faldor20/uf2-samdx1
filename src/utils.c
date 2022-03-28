@@ -145,6 +145,13 @@ static uint8_t limit = 200;
 void led_tick() {
     led_tick_on = true;
     now++;
+#ifdef SAML22
+    // this is a workaround for an issue with Sensor Watch: if bootloader mode is
+    // entered accidentally (which has happened i.e. when dropped hard), there is
+    // no way to leave bootloader mode without disassembling it and tapping the
+    // reset button. To work around this, we exit the bootloader after 60 seconds.
+    if (now > 2880000) resetIntoApp();
+#endif
     if (signal_end) {
         if (now == signal_end - 1000) {
             LED_MSC_ON();
