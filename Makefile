@@ -8,6 +8,9 @@ endif
 ifeq ($(CHIP_FAMILY), samd51)
 COMMON_FLAGS = -mthumb -mcpu=cortex-m4 -O2 -g -DSAMD51
 endif
+ifeq ($(CHIP_FAMILY), saml21)
+COMMON_FLAGS = -mthumb -mcpu=cortex-m0plus -Os -g -DSAML21
+endif
 ifeq ($(CHIP_FAMILY), saml22)
 COMMON_FLAGS = -mthumb -mcpu=cortex-m0plus -Os -g -DSAML22
 endif
@@ -32,6 +35,12 @@ $(WFLAGS)
 UF2_VERSION_BASE = $(shell git describe --dirty --always --tags)
 
 ifeq ($(CHIP_FAMILY), samd21)
+LINKER_SCRIPT=scripts/samd21j18a.ld
+BOOTLOADER_SIZE=8192
+SELF_LINKER_SCRIPT=scripts/samd21j18a_self.ld
+endif
+
+ifeq ($(CHIP_FAMILY), saml21)
 LINKER_SCRIPT=scripts/samd21j18a.ld
 BOOTLOADER_SIZE=8192
 SELF_LINKER_SCRIPT=scripts/samd21j18a_self.ld
@@ -74,6 +83,10 @@ else
 INCLUDES += -Ilib/samd51/include/
 endif
 endif
+endif
+
+ifeq ($(findstring SAML21,$(CHIP_VARIANT)),SAML21)
+INCLUDES += -Ilib/saml21/include/
 endif
 
 ifeq ($(findstring SAML22,$(CHIP_VARIANT)),SAML22)

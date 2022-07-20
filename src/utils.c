@@ -17,7 +17,7 @@ void __attribute__ ((noinline)) delay(uint32_t ms) {
     // 48MHz, so we don't need to adjust for current_cpu_frequency_MHz.
     uint32_t count = ms * (led_tick_on ? 6353 : 6826);
 #endif
-#ifdef SAML22
+#if defined(SAML21) || defined(SAML22)
     uint32_t count = ms * (current_cpu_frequency_MHz) * (led_tick_on ? 149: 167);
 #endif
     for (uint32_t i = 1; i < count; ++i) {

@@ -388,7 +388,7 @@ static void load_serial_number(char serial_number[SERIAL_NUMBER_LENGTH]) {
     uint32_t* addresses[4] = {(uint32_t *) 0x008061FC, (uint32_t *) 0x00806010,
                               (uint32_t *) 0x00806014, (uint32_t *) 0x00806018};
     #endif
-    #ifdef SAML22
+    #if defined(SAML21) || defined(SAML22)
     uint32_t* addresses[4] = {(uint32_t *) 0x0080A00C, (uint32_t *) 0x0080A040,
                               (uint32_t *) 0x0080A044, (uint32_t *) 0x0080A048};
     #endif
@@ -478,7 +478,7 @@ void AT91F_InitUSB(void) {
     #define DP_PIN PIN_PA25H_USB_DP
     #define DP_MUX MUX_PA25H_USB_DP
     #endif
-    #ifdef SAML22
+    #if defined(SAML21) || defined(SAML22)
     #define DM_PIN PIN_PA24G_USB_DM
     #define DM_MUX MUX_PA24G_USB_DM
     #define DP_PIN PIN_PA25G_USB_DP
@@ -504,7 +504,7 @@ void AT91F_InitUSB(void) {
 
     while(GCLK->SYNCBUSY.bit.GENCTRL0) {}
     #endif
-    #ifdef SAML22
+    #if defined(SAML22) || defined(SAML21)
     GCLK->PCHCTRL[USB_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK0_Val | (1 << GCLK_PCHCTRL_CHEN_Pos);
     MCLK->AHBMASK.bit.USB_ = true;
     MCLK->APBBMASK.bit.USB_ = true;

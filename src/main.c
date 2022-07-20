@@ -82,7 +82,7 @@ extern int8_t led_tick_step;
     #define RESET_CONTROLLER PM
 #elif defined(SAMD51)
     #define RESET_CONTROLLER RSTC
-#elif defined(SAML22)
+#elif defined(SAML21) || defined(SAML22)
     #define RESET_CONTROLLER RSTC
 #endif
 
@@ -235,7 +235,7 @@ int main(void) {
     SUPC->BOD33.bit.ACTION = SUPC_BOD33_ACTION_RESET_Val;
     SUPC->BOD33.bit.ENABLE = 1;
 
-#elif defined(SAML22)
+#elif defined(SAML21) || defined(SAML22)
     // Disable the watchdog, in case the application set it.
     WDT->CTRLA.reg = 0;
     while(WDT->SYNCBUSY.reg) {}
@@ -263,7 +263,11 @@ int main(void) {
     // wait for the voltage to stabilize. Don't do this on an
     // external reset because it interferes with the timing of double-click.
     // "BODVDD" means BOD33.
+#ifdef SAML21
+    if (RSTC->RCAUSE.bit.POR || RSTC->RCAUSE.bit.BOD33) {
+#else // SAML22
     if (RSTC->RCAUSE.bit.POR || RSTC->RCAUSE.bit.BODVDD) {
+#endif
         do {
             // Check again in 100ms.
             delay(100);
