@@ -213,10 +213,10 @@ void read_block(uint32_t block_no, uint8_t *data) {
 #endif
 }
 
-void write_block(uint32_t block_no, uint8_t *data, bool quiet, WriteState *state) {
+bool write_block(uint32_t block_no, uint8_t *data, bool quiet, WriteState *state) {
     UF2_Block *bl = (void *)data;
     if (!is_uf2_block(bl) || !UF2_IS_MY_FAMILY(bl)) {
-        return;
+        return false;
     }
 
     if ((bl->flags & UF2_FLAG_NOFLASH) || bl->payloadSize != 256 || (bl->targetAddr & 0xff) ||
@@ -259,4 +259,5 @@ void write_block(uint32_t block_no, uint8_t *data, bool quiet, WriteState *state
         if (!quiet)
             resetHorizon = timerHigh + 300;
     }
+    return true;
 }

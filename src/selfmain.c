@@ -134,7 +134,7 @@ void set_fuses_and_bootprot(uint32_t new_bootprot) {
 
     resetIntoApp();
 }
-
+__attribute__((used))
 int main(void) {
     led_init();
 

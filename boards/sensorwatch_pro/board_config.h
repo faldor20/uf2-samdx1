@@ -1,9 +1,9 @@
 #ifndef BOARD_CONFIG_H
 #define BOARD_CONFIG_H
 
-#define VENDOR_NAME "Oddly Specific Objects"
-#define PRODUCT_NAME "Sensor Watch Lite"
-#define VOLUME_LABEL "WATCHBOOT"
+#define VENDOR_NAME "OSO"
+#define PRODUCT_NAME "SWAT-PRO"
+#define VOLUME_LABEL "WATCH"
 #define INDEX_URL "http://oddlyspecific.org/"
 #define BOARD_ID "OSO-SWAT-B1"
 
@@ -20,5 +20,14 @@
 #define BOOT_USART_PAD2                   PINMUX_UNUSED
 #define BOOT_USART_PAD1                   PINMUX_PB03C_SERCOM3_PAD1
 #define BOOT_USART_PAD0                   PINMUX_PB02C_SERCOM3_PAD0
+
+
+#define I2C_BAUD_HZ 100000
+#define I2C_BUS_CLOCK_INDEX MCLK_APBCMASK_SERCOM1
+#define I2C_GCLK_ID_CORE SERCOM1_GCLK_ID_CORE
+#define I2C_GCLK_ID_SLOW SERCOM1_GCLK_ID_SLOW
+
+#define I2C_SDA_PIN PINMUX_PB30C_SERCOM1_PAD0
+#define I2C_SCL_PIN PINMUX_PB31C_SERCOM1_PAD1
 
 #endif

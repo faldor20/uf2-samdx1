@@ -1,4 +1,6 @@
+#include "board_config.h"
 #include "uf2.h"
+#include "i2c.h"
 
 volatile bool g_interrupt_enabled = true;
 
@@ -71,6 +73,15 @@ void system_init(void) {
 
     current_cpu_frequency_MHz = 48;
 
+    /* I2C SERCOM1 clock and pin mux for PB30 (SDA) / PB31 (SCL) */
+    /* Enable SERCOM1 core/slow clocks */
+    GCLK->PCHCTRL[I2C_GCLK_ID_CORE].reg = GCLK_PCHCTRL_GEN_GCLK0_Val | GCLK_PCHCTRL_CHEN;
+    GCLK->PCHCTRL[I2C_GCLK_ID_SLOW].reg = GCLK_PCHCTRL_GEN_GCLK0_Val | GCLK_PCHCTRL_CHEN;
+    /* Enable bus clock to SERCOM1 */
+    MCLK->APBCMASK.reg |= I2C_BUS_CLOCK_INDEX;
+    /* Pin mux: PB30C -> SERCOM1 PAD0, PB31C -> SERCOM1 PAD1 */
+    i2c_configure_pins(I2C_SDA_PIN, I2C_SCL_PIN);
+
   // Output 500hz PWM on PA04 (TCC0 WO[0]) so we can validate the GCLK0 clock speed
 //   MCLK->APBCMASK.reg |= MCLK_APBCMASK_TCC0;
 //   TCC0->PER.bit.PER = 48000000 / 1000;
@@ -82,4 +93,4 @@ void system_init(void) {
 //   GCLK->PCHCTRL[TCC0_GCLK_ID].reg = GCLK_PCHCTRL_GEN_GCLK0_Val | GCLK_PCHCTRL_CHEN;
 }
 
-void SysTick_Handler(void) { LED_TICK(); }
+void SysTick_Handler(void) { timerTick(); }

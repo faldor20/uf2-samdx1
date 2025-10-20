@@ -56,6 +56,7 @@ extern uint32_t _sstack;
 extern uint32_t _estack;
 
 /** \cond DOXYGEN_SHOULD_SKIP_THIS */
+__attribute__((used))
 int main(void);
 /** \endcond */
 
@@ -120,7 +121,7 @@ void TRNG_Handler            ( void ) __attribute__ ((weak, alias("Dummy_Handler
 #endif
 
 /* Exception Table */
-__attribute__ ((section(".vectors")))
+__attribute__ ((section(".vectors"), used))
 const DeviceVectors exception_table = {
 
         /* Configure Initial Stack Pointer, using linker-generated symbols */

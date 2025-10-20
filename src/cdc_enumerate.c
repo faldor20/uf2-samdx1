@@ -1110,7 +1110,7 @@ void usb_init(void) {
     USB->DEVICE.CTRLA.bit.ENABLE = true;
 }
 
-#include "usart_sam_ba.h"
+//#include "usart_sam_ba.h"
 
 #if USE_UART
 #define UART(e)                                                                                    \

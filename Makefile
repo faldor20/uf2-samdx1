@@ -15,7 +15,7 @@ ifeq ($(CHIP_FAMILY), saml22)
 COMMON_FLAGS = -mthumb -mcpu=cortex-m0plus -Os -g -DSAML22
 endif
 WFLAGS = \
--Werror -Wall -Wstrict-prototypes \
+ -Wall -Wstrict-prototypes \
 -Werror-implicit-function-declaration -Wpointer-arith -std=gnu99 \
 -ffunction-sections -fdata-sections -Wchar-subscripts -Wcomment -Wformat=2 \
 -Wimplicit-int -Wmain -Wparentheses -Wsequence-point -Wreturn-type -Wswitch \
@@ -28,9 +28,20 @@ WFLAGS = \
 CFLAGS = $(COMMON_FLAGS) \
 -x c -c -pipe -nostdlib \
 --param max-inline-insns-single=500 \
--fno-strict-aliasing -fdata-sections -ffunction-sections \
+-fno-strict-aliasing -fdata-sections -ffunction-sections -flto \
 -D__$(CHIP_VARIANT)__ \
 $(WFLAGS)
+
+
+# Compiler optimization flags
+# CFLAGS += -fomit-frame-pointer \
+#          -ffast-math \
+#          -fshort-enums \	
+
+
+CFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections \
+         -fmerge-all-constants
+
 
 UF2_VERSION_BASE = $(shell git describe --dirty --always --tags)
 
@@ -60,14 +71,24 @@ endif
 
 LDFLAGS= $(COMMON_FLAGS) \
 -Wall -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--unresolved-symbols=report-all -Wl,--warn-common \
--Wl,--warn-section-align \
+-Wl,--warn-section-align -flto \
 -save-temps -nostartfiles \
 --specs=nano.specs --specs=nosys.specs
 BUILD_PATH=build/$(BOARD)
 INCLUDES = -I. -I./inc -I./inc/preprocessor
 INCLUDES += -I./boards/$(BOARD) -Ilib/cmsis/CMSIS/Include -Ilib/usb_msc
 INCLUDES += -I$(BUILD_PATH)
+INCLUDES += -Ilib/ST25FTM/Inc -Isrc/ST25FTM/Inc
+INCLUDES += -Ilib/st25dv
 
+# LDFLAGS += -s 
+
+#opimization flags:
+# LDFLAGS += -Wl,--print-gc-sections \
+#           -Wl,--sort-section=alignment \
+#           -Wl,--sort-common
+
+LDFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections
 
 ifeq ($(CHIP_FAMILY), samd21)
 INCLUDES += -Ilib/samd21/samd21a/include/
@@ -97,24 +118,38 @@ COMMON_SRC = \
 	src/flash_$(CHIP_FAMILY).c \
 	src/init_$(CHIP_FAMILY).c \
 	src/startup_$(CHIP_FAMILY).c \
-	src/usart_sam_ba.c \
-	src/screen.c \
-	src/images.c \
-	src/utils.c
+	src/utils.c\
+	# src/usart_sam_ba.c \
 
 SOURCES = $(COMMON_SRC) \
 	src/cdc_enumerate.c \
 	src/fat.c \
 	src/main.c \
 	src/msc.c \
-	src/sam_ba_monitor.c \
-	src/uart_driver.c \
-	src/hid.c \
+	src/i2c.c \
+	src/nfc_ftm.c \
+	src/ST25FTM/Src/nfc_ftm_port.c \
+	# src/sam_ba_monitor.c \
+
+# ST25 FTM library sources
+FTM_SOURCES = \
+	lib/ST25FTM/Src/st25ftm_common.c \
+	lib/ST25FTM/Src/st25ftm_protocol.c \
+	lib/ST25FTM/Src/st25ftm_rx.c \
+	lib/ST25FTM/Src/st25ftm_tx.c
+
+# ST25DV driver sources
+ST25DV_SOURCES = \
+	lib/st25dvxxkc/st25dvxxkc.c \
+	lib/st25dvxxkc/st25dvxxkc_reg.c
 
 SELF_SOURCES = $(COMMON_SRC) \
-	src/selfmain.c
+	src/selfmain.c \
+	src/i2c.c
 
 OBJECTS = $(patsubst src/%.c,$(BUILD_PATH)/%.o,$(SOURCES))
+FTM_OBJECTS = $(patsubst lib/%.c,$(BUILD_PATH)/lib/%.o,$(FTM_SOURCES))
+ST25DV_OBJECTS = $(patsubst lib/%.c,$(BUILD_PATH)/lib/%.o,$(ST25DV_SOURCES))
 SELF_OBJECTS = $(patsubst src/%.c,$(BUILD_PATH)/%.o,$(SELF_SOURCES)) $(BUILD_PATH)/selfdata.o
 
 NAME=bootloader-$(BOARD)-$(UF2_VERSION_BASE)
@@ -183,10 +218,10 @@ dirs:
 	@echo "Building $(BOARD)"
 	-@mkdir -p $(BUILD_PATH)
 
-$(EXECUTABLE): $(OBJECTS)
+$(EXECUTABLE): $(OBJECTS) $(FTM_OBJECTS) $(ST25DV_OBJECTS)
 	$(CC) -L$(BUILD_PATH) $(LDFLAGS) \
 		 -T$(LINKER_SCRIPT) \
-		 -Wl,-Map,$(BUILD_PATH)/$(NAME).map -o $(BUILD_PATH)/$(NAME).elf $(OBJECTS)
+		 -Wl,-Map,$(BUILD_PATH)/$(NAME).map -o $(BUILD_PATH)/$(NAME).elf $(OBJECTS) $(FTM_OBJECTS) $(ST25DV_OBJECTS)
 	arm-none-eabi-objcopy -O binary $(BUILD_PATH)/$(NAME).elf $@
 	@echo
 	-@arm-none-eabi-size $(BUILD_PATH)/$(NAME).elf | awk '{ s=$$1+$$2; print } END { print ""; print "Space left: " ($(BOOTLOADER_SIZE)-s) }'
@@ -198,13 +233,28 @@ $(BUILD_PATH)/uf2_version.h: Makefile
 $(SELF_EXECUTABLE): $(SELF_OBJECTS)
 	$(CC) -L$(BUILD_PATH) $(LDFLAGS) \
 		 -T$(SELF_LINKER_SCRIPT) \
+		 -Wl,-u,exception_table \
+		 -Wl,-u,Reset_Handler \
 		 -Wl,-Map,$(BUILD_PATH)/update-$(NAME).map -o $(BUILD_PATH)/update-$(NAME).elf $(SELF_OBJECTS)
 	arm-none-eabi-objcopy -O binary $(BUILD_PATH)/update-$(NAME).elf $(BUILD_PATH)/update-$(NAME).bin
 	python3 lib/uf2/utils/uf2conv.py -b $(BOOTLOADER_SIZE) -c -o $@ $(BUILD_PATH)/update-$(NAME).bin
 
+
 $(BUILD_PATH)/%.o: src/%.c $(wildcard inc/*.h boards/*/*.h) $(BUILD_PATH)/uf2_version.h
 	echo "$<"
 	$(CC) $(CFLAGS) $(BLD_EXTA_FLAGS) $(INCLUDES) $< -o $@
+
+$(BUILD_PATH)/lib/%.o: lib/%.c $(wildcard inc/*.h boards/*/*.h) $(BUILD_PATH)/uf2_version.h
+	echo "$<"
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(BLD_EXTA_FLAGS) $(INCLUDES) $< -o $@
+
+# Relax vendor warnings for ST25DV driver files only
+$(BUILD_PATH)/lib/st25dv/st25dv.o: lib/st25dv/st25dv.c
+	$(CC) $(CFLAGS) -Wno-redundant-decls $(BLD_EXTA_FLAGS) $(INCLUDES) $< -o $@
+
+$(BUILD_PATH)/lib/st25dv/st25dv_reg.o: lib/st25dv/st25dv_reg.c
+	$(CC) $(CFLAGS) -Wno-redundant-decls $(BLD_EXTA_FLAGS) $(INCLUDES) $< -o $@
 
 $(BUILD_PATH)/%.o: $(BUILD_PATH)/%.c
 	$(CC) $(CFLAGS) $(BLD_EXTA_FLAGS) $(INCLUDES) $< -o $@

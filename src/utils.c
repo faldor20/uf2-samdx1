@@ -141,8 +141,10 @@ static uint32_t signal_end;
 int8_t led_tick_step = 1;
 volatile bool led_tick_on = false;
 static uint8_t limit = 200;
+#define ENABLE_LED 1
 
 void led_tick() {
+#if(ENABLE_LED)
     led_tick_on = true;
     now++;
 #ifdef SAML22
@@ -150,7 +152,7 @@ void led_tick() {
     // entered accidentally (which has happened i.e. when dropped hard), there is
     // no way to leave bootloader mode without disassembling it and tapping the
     // reset button. To work around this, we exit the bootloader after 60 seconds.
-    if (now > 2880000) resetIntoApp();
+    // if (now > 2880000) resetIntoApp();
 #endif
     if (signal_end) {
         if (now == signal_end - 1000) {
@@ -171,13 +173,44 @@ void led_tick() {
             LED_MSC_OFF();
         }
     }
+    #endif
 }
 
 void led_signal() {
+    #if(ENABLE_LED)
     if (signal_end < now) {
-        signal_end = now + 2000;
+            signal_end = now + 2000;
+            LED_MSC_OFF();
+        }
+    #endif
+}
+#define ENABLE_LED_FLASH 0
+// Flash LED to indicate initialization stage
+// num_flashes: number of flashes (1-5 for different stages)
+// final_state: true = LED on after sequence, false = LED off
+void led_init_flash(uint8_t num_flashes, bool final_state,uint16_t duration) {
+#if(ENABLE_LED_FLASH)
+    // Ensure we have LED control
+    LED_MSC_OFF();
+    delay(duration);
+
+    for (uint8_t i = 0; i < num_flashes; i++) {
+        LED_MSC_ON();
+        delay(duration);
+        LED_MSC_OFF();
+        if (i < num_flashes - 1) {  // Don't pause after last flash
+            delay(duration);
+        }
+    }
+
+    // Set final state
+    if (final_state) {
+        LED_MSC_ON();
+    } else {
         LED_MSC_OFF();
     }
+    delay(duration);  // Brief pause before continuing
+#endif
 }
 
 void led_init() {
@@ -270,4 +303,5 @@ void RGBLED_set_color(uint32_t color) {
 #endif
     neopixel_send_buffer(buf, BOARD_NEOPIXEL_COUNT * 3);
 #endif
+
 }

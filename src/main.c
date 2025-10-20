@@ -71,7 +71,68 @@
  *
  */
 
+#include "lib/st25dvxxkc/st25dvxxkc.h"
+#include "lib/st25dvxxkc/st25dvxxkc_reg.h"
 #include "uf2.h"
+#include "i2c.h"
+#include "nfc_ftm.h"
+// #include <string.h>
+
+/* ST25DV platform object and bus bindings */
+static ST25DVxxKC_Object_t g_st25dv_obj;
+static bool g_st25dv_inited = false;
+
+static int32_t st25dv_bus_init(void) { return NFCTAG_OK; }
+static int32_t st25dv_bus_deinit(void) { return NFCTAG_OK; }
+static int32_t st25dv_bus_write(uint16_t DevAddr, uint16_t MemAddr, const uint8_t *pData, uint16_t len) {
+	uint8_t i2c_addr_7bit = (uint8_t)(DevAddr >> 1);
+	uint8_t hdr[2] = { (uint8_t)(MemAddr >> 8), (uint8_t)(MemAddr & 0xFF) };
+	if (len == 0) {
+		return (i2c_write(i2c_addr_7bit, hdr, 2) == I2C_RESULT_SUCCESS) ? NFCTAG_OK : NFCTAG_ERROR;
+	}
+	if (len > 256) len = 256;
+	uint8_t tmp[2 + 256];
+	tmp[0] = hdr[0];
+	tmp[1] = hdr[1];
+	for (uint16_t i = 0; i < len; i++) tmp[2 + i] = pData[i];
+	return (i2c_write(i2c_addr_7bit, tmp, (uint32_t)(2 + len)) == I2C_RESULT_SUCCESS) ? NFCTAG_OK : NFCTAG_ERROR;
+}
+static int32_t st25dv_bus_read(uint16_t DevAddr, uint16_t MemAddr, uint8_t *pData, uint16_t len) {
+	uint8_t i2c_addr_7bit = (uint8_t)(DevAddr >> 1);
+	uint8_t addr[2] = { (uint8_t)(MemAddr >> 8), (uint8_t)(MemAddr & 0xFF) };
+	if (i2c_write(i2c_addr_7bit, addr, 2) != I2C_RESULT_SUCCESS) return NFCTAG_ERROR;
+	return (i2c_read(i2c_addr_7bit, pData, len) == I2C_RESULT_SUCCESS) ? NFCTAG_OK : NFCTAG_ERROR;
+}
+static int32_t st25dv_bus_isready(uint16_t DevAddr, const uint32_t Trials) {
+	uint8_t i2c_addr_7bit = (uint8_t)(DevAddr >> 1);
+	for (uint32_t i = 0; i < Trials; i++) {
+		if (i2c_write(i2c_addr_7bit, NULL, 0) == I2C_RESULT_SUCCESS) return NFCTAG_OK;
+		delay(1);
+	}
+	return NFCTAG_ERROR;
+}
+static int32_t st25dv_bus_gettick(void) { return (int32_t)timerHigh; }
+
+void* ST25FTM_GetSt25dvHandle(void) {
+	if (!g_st25dv_inited) {
+		ST25DVxxKC_IO_t io = {
+			.Init = st25dv_bus_init,
+			.DeInit = st25dv_bus_deinit,
+			.IsReady = st25dv_bus_isready,
+			.Write = st25dv_bus_write,
+			.Read = st25dv_bus_read,
+			.GetTick = st25dv_bus_gettick,
+			.DeviceAddress = ST25DVXXKC_ADDR_DATA_I2C,
+		};
+		if (ST25DVxxKC_RegisterBusIO(&g_st25dv_obj, &io) != NFCTAG_OK)
+			return NULL;
+		if (St25Dvxxkc_Drv.Init(&g_st25dv_obj) != NFCTAG_OK)
+			return NULL;
+        
+		g_st25dv_inited = true;
+	}
+	return &g_st25dv_obj;
+}
 
 static void check_start_application(void);
 
@@ -157,11 +218,15 @@ extern char _end;
  *  \brief  SAM-BA Main loop.
  *  \return Unused (ANSI-C compatibility).
  */
+ __attribute__((used))
 int main(void) {
     // if VTOR is set, we're not running in bootloader mode; halt
     if (SCB->VTOR)
         while (1) {
         }
+
+    // Stage 1: Basic initialization complete
+    led_init_flash(1, false, 250);
 
 #if defined(SAMD21)
     // If fuses have been reset to all ones, the watchdog ALWAYS-ON is
@@ -296,80 +361,104 @@ int main(void) {
     assert(FLASH_PAGE_SIZE * NVMCTRL->PARAM.bit.NVMP == FLASH_SIZE);
 
     /* Jump in application if condition is satisfied */
+    //disable temporarily so we are always in bootloader mode 
     check_start_application();
 
     /* We have determined we should stay in the monitor. */
     /* System initialization */
     system_init();
+    RGBLED_set_color(COLOR_START);
+    LED_MSC_ON();
+    delay(500);
+    LED_MSC_OFF();
+    // delay(2000);
+    // LED_MSC_ON();
+    // delay(500);
+    // LED_MSC_OFF();
+    /* Initialize I2C bus and ST25 FTM */
+    i2c_init(100000);
+    i2c_enable();
+    RGBLED_set_color(0x00FF00);
+    // //test the nfc communication works by writing a sequence to the nfc tag
+    // uint8_t test_sequence[] = "NFC-TEST";
+
+LED_MSC_ON();
+    // {
+    //     ST25DV_Object_t st25_obj;
+    //     ST25DV_IO_t io_ctx = {
+    //         .Init = st25_test_bus_init,
+    //         .DeInit = st25_test_bus_deinit,
+    //         .Write = st25_test_bus_write,
+    //         .Read = st25_test_bus_read,
+    //         .IsReady = st25_test_bus_isready,
+    //         .GetTick = st25_test_bus_gettick
+    //     };
+    //     ST25DV_ResetRFDisable(&st25_obj);
+    //     ST25DV_ResetRFDisable_Dyn(&st25_obj);
+    //     ST25DV_SetRF_MNGT_RFDIS(&st25_obj.Ctx,0x00);
+    //     uint8_t rb[sizeof(test_sequence)] = {0};
+    //     //looks like there is an issue with my i2c setup or my connection to the chip or something
+    //     // should check the voltage to the chip
+    //     // the i2c lines with the scope
+    //     // the i2c pins are correct
+    //     // etc
+        
+    //     if (ST25DV_RegisterBusIO(&st25_obj, &io_ctx) == NFCTAG_OK &&
+    //         St25Dv_Drv.Init(&st25_obj) == NFCTAG_OK &&
+    //         St25Dv_Drv.WriteData(&st25_obj, test_sequence, 0x0010, (uint16_t)sizeof(test_sequence)) == NFCTAG_OK &&
+    //         St25Dv_Drv.ReadData(&st25_obj, rb, 0x0010, (uint16_t)sizeof(test_sequence)) == NFCTAG_OK) {
+    //         if (memcmp(test_sequence, rb, sizeof(test_sequence)) == 0) {
+    //             logmsg("NFC test write/read OK");
+    //             RGBLED_set_color(COLOR_LEAVE);
+    //             led_init_flash(10, false,150);
+    //         } else {
+    //             logmsg("NFC test data mismatch");
+    //             RGBLED_set_color(0xFFFF00);
+    //             led_init_flash(5, false,150);
+    //         }
+    //     } else {
+    //         logmsg("NFC test write/read failed");
+    //         RGBLED_set_color(0xFFFF00);
+    //             led_init_flash(3, false,150);
+    //     }
+    // }
+ 
+    
 
     __DMB();
     __enable_irq();
 
-#if USE_UART
-    /* UART is enabled in all cases */
-    usart_open();
-#endif
+    if(!nfc_ftm_start()) {
+        while(1) {
+            delay(1000);
+        }
+    }
 
-    logmsg("Before main loop");
 
-    usb_init();
+    LED_MSC_TGL();
+    delay(500);
+    LED_MSC_TGL();
+    delay(500);
+    LED_MSC_TGL();
+    // logmsg("Before main loop");
+
+    // usb_init();
 
     // not enumerated yet
     RGBLED_set_color(COLOR_START);
     led_tick_step = 10;
-
+    uint32_t count = 0;
+    // delay(2000);
     /* Wait for a complete enum on usb or a '#' char on serial line */
     while (1) {
-        if (USB_Ok()) {
-            if (!main_b_cdc_enable) {
-#if USE_SINGLE_RESET
-                // this might have been set
-                resetHorizon = 0;
-#endif
-                RGBLED_set_color(COLOR_USB);
-                led_tick_step = 1;
-
-#if USE_SCREEN
-                screen_init();
-                draw_drag();
-#endif
-            }
-
-            main_b_cdc_enable = true;
+        /* NFC FTM cooperative runner */
+        nfc_ftm_poll();
+        if(count==30){
+            count = 0;
+            LED_MSC_TGL();
         }
-
-#if USE_MONITOR
-        // Check if a USB enumeration has succeeded
-        // And com port was opened
-        if (main_b_cdc_enable) {
-            logmsg("entering monitor loop");
-            // SAM-BA on USB loop
-            while (1) {
-                sam_ba_monitor_run();
-            }
-        }
-#if USE_UART
-        /* Check if a '#' has been received */
-        if (!main_b_cdc_enable && usart_sharp_received()) {
-            RGBLED_set_color(COLOR_UART);
-            sam_ba_monitor_init(SAM_BA_INTERFACE_USART);
-            /* SAM-BA on UART loop */
-            while (1) {
-                sam_ba_monitor_run();
-            }
-        }
-#endif
-#else // no monitor
-        if (main_b_cdc_enable) {
-            process_msc();
-        }
-#endif
-
-        if (!main_b_cdc_enable) {
-            // get more predictable timings before the USB is enumerated
-            for (int i = 1; i < 256; ++i) {
-                asm("nop");
-            }
-        }
+        count++;
     }
+
+
 }
