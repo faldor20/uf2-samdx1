@@ -58,6 +58,7 @@ void timerTick(void) {
             resetIntoApp();
         }
     }
+    
 }
 
 void panic(int code) {
@@ -141,7 +142,7 @@ static uint32_t signal_end;
 int8_t led_tick_step = 1;
 volatile bool led_tick_on = false;
 static uint8_t limit = 200;
-#define ENABLE_LED 1
+#define ENABLE_LED 0
 
 void led_tick() {
 #if(ENABLE_LED)

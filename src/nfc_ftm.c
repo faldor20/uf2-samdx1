@@ -1,25 +1,20 @@
 /* NFC FTM runner glue with UF2 block receiver */
 
 #include <string.h>
+#include "st25ftm_internal.h"
 #include "uf2.h"
 #include "nfc_ftm.h"
 #include "lib/ST25FTM/Inc/st25ftm.h"
-/* ST25DV driver is used in the port file; not needed here */
 
-/* Platform must provide initialized ST25DV handle; weak default returns NULL */
-extern void *ST25FTM_GetSt25dvHandle(void);
+#define NFC_FTM_RX_BUF_SIZE 512
 
 typedef struct {
-    uint8_t buf[512];
+    uint8_t buf[NFC_FTM_RX_BUF_SIZE];
     uint32_t filled;
     WriteState ws;
-    bool active;
     uint8_t cmdId;
     bool cmdSeen;
     bool transferring;
-    bool block_ready;
-    bool argSeen;
-    uint8_t cmdArg;
     bool isBinary;
     bool error;
     uint32_t binAddr;
@@ -35,7 +30,6 @@ static bool g_wait_after_response = false;
 
 static void ftm_arm_rx(void) {
     /* Reset local RX state and arm the library reception */
-    g_rx.active = true;
     g_rx.cmdId = 0xFF;
     g_rx.cmdSeen = false;
     g_rx.binAddr = APP_START_ADDRESS;
@@ -85,10 +79,11 @@ static void ftm_event_cb(ST25FTM_Protocol_Event_t event, ST25FTM_EventData_t *ev
                          void *userData) {
     (void)userData;
     switch (event) {
-    case EVENT_FTM_RX_NEW_FRAME:
-        g_rx.active = true;
-        /* If we're in the middle of a firmware transfer, preserve state across frames. */
-        break;
+    // case EVENT_FTM_RX_NEW_FRAME:
+    //     g_rx.active = true;
+    //     g_rx.transferring = true;
+    //     /* If we're in the middle of a firmware transfer, preserve state across frames. */
+    //     break;
     case EVENT_FTM_RX_NEW_PKT:
         g_wait_after_response = true;
         break;
@@ -106,7 +101,6 @@ static void ftm_event_cb(ST25FTM_Protocol_Event_t event, ST25FTM_EventData_t *ev
                     remaining--;
                     if (g_rx.cmdId == FTM_CMD_FW_UPGRADE || g_rx.cmdId == FTM_CMD_FW_UPGRADE_BIN) {
                         g_rx.transferring = true;
-                        g_rx.argSeen = false;
                         g_rx.isBinary = (g_rx.cmdId == FTM_CMD_FW_UPGRADE_BIN);
                         g_rx.binAddr = APP_START_ADDRESS;
                         g_rx.error = false;
@@ -114,6 +108,7 @@ static void ftm_event_cb(ST25FTM_Protocol_Event_t event, ST25FTM_EventData_t *ev
                 }
             }
             if (remaining) {
+                g_rx.transferring = true;
                 if (g_rx.cmdId == FTM_CMD_FW_UPGRADE || g_rx.cmdId == FTM_CMD_FW_UPGRADE_BIN) {
                     /* Read directly into UF2 block buffer */
                     while (remaining) {
@@ -168,23 +163,17 @@ static void ftm_event_cb(ST25FTM_Protocol_Event_t event, ST25FTM_EventData_t *ev
             ftm_send_basic_response(g_rx.cmdId, g_rx.error ? FTM_STATUS_ERROR : FTM_STATUS_VALID);
 
             if (!g_rx.error) {
-                resetHorizon = timerHigh + 30;
+                resetHorizon = timerHigh + 300;
             }
 
             g_rx.filled = 0;
-        } else if (g_rx.cmdId == FTM_CMD_TEST) {
-
-            /* Test command 0x99: acknowledge (response[0] will be 0x99) */
-            ftm_send_basic_response(g_rx.cmdId, FTM_STATUS_VALID);
-
-        } else {
-            /* Unknown command: respond with unknown status if a command was seen */
-            if (g_rx.cmdSeen) {
-                ftm_send_basic_response(g_rx.cmdId, FTM_STATUS_UNKNOWN);
-            }
         }
-        g_rx.active = false;
+
         g_rx.transferring = false;
+        break;
+    case EVENT_FTM_ERROR:
+        g_rx.error = true;
+        resetHorizon = timerHigh + 50;
         break;
     default:
         break;
@@ -194,7 +183,7 @@ static void ftm_event_cb(ST25FTM_Protocol_Event_t event, ST25FTM_EventData_t *ev
 bool nfc_ftm_start(void) {
     /* Normal FTM mode */
     memset(&g_rx, 0, sizeof(g_rx));
-    if (ST25FTM_Initialize(ST25FTM_GetSt25dvHandle()) != ST25FTM_OK) {
+    if (ST25FTM_Initialize(NULL) != ST25FTM_OK) {
         return false;
     }
     ST25FTM_SetRunnerPolicy(ST25FTM_RUNNER_LOOP_WITHIN_APPLICATION);
@@ -202,7 +191,7 @@ bool nfc_ftm_start(void) {
     ST25FTM_RegisterEvent(EVENT_FTM_RX_DONE, ftm_event_cb, NULL);
     ST25FTM_RegisterEvent(EVENT_FTM_RX_NEW_PKT, ftm_event_cb, NULL);
     ST25FTM_RegisterEvent(EVENT_FTM_RX_NEW_FRAME, ftm_event_cb, NULL);
-
+    ST25FTM_RegisterEvent(EVENT_FTM_ERROR, ftm_event_cb, NULL);
     ftm_arm_rx();
 
     led_init_flash(3, false, 100);
@@ -210,7 +199,7 @@ bool nfc_ftm_start(void) {
     // ST25FTM_SetReadySequence();
     return true;
 }
-
+uint32_t empty_loop_count = 0;
 void nfc_ftm_poll(void) {
     /* Normal FTM mode - poll as fast as possible to avoid mailbox overflow */
     uint8_t remaining = 1;
@@ -218,17 +207,27 @@ void nfc_ftm_poll(void) {
         remaining = ST25FTM_Runner();
     }
 
+    // check if we have started sending and then stopped recieving for a couple seconds
+    // if so, give up and reset the device
+    if (empty_loop_count > 400) {
+        resetHorizon = timerHigh + 50;
+    }
+
     /* Write any ready blocks */
 
     if (!g_rx.transferring) {
-        delay(100);
+        delay(150);
+        //we add here as well and it'll turn off after 400 loops at 150ms each which is 60 seconds
+        empty_loop_count ++;
     } else {
         if (g_wait_after_response) {
+            empty_loop_count = 0;
             // we wait for at least 100ms after the response is sent then sleep for a bit
-            delay(150);
+            delay(145);
             g_wait_after_response = false;
         } else {
-            delay(20);
+            empty_loop_count++;
+            delay(15);
         }
     }
 }

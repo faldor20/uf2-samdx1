@@ -154,6 +154,9 @@ i2c_result_t i2c_read_instance(void *sercom_instance, uint8_t address, uint8_t *
     }
 
     for (size_t i = 0; i < len; i++) {
+        if (i == len - 1) {
+            sercom->I2CM.CTRLB.reg |= SERCOM_I2CM_CTRLB_ACKACT; /* NACK last byte */
+        }
         data[i] = sercom->I2CM.DATA.reg;
         size_t w = 0;
         while (!sercom->I2CM.INTFLAG.bit.SB) {
@@ -166,7 +169,7 @@ i2c_result_t i2c_read_instance(void *sercom_instance, uint8_t address, uint8_t *
         }
     }
 
-    sercom->I2CM.CTRLB.reg |= SERCOM_I2CM_CTRLB_ACKACT | SERCOM_I2CM_CTRLB_CMD(3); /* NACK+STOP */
+    sercom->I2CM.CTRLB.bit.CMD = 3; /* STOP */
     while (sercom->I2CM.SYNCBUSY.bit.SYSOP) { }
     return I2C_RESULT_SUCCESS;
 }
