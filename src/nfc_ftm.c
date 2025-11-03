@@ -199,35 +199,30 @@ bool nfc_ftm_start(void) {
     // ST25FTM_SetReadySequence();
     return true;
 }
-uint32_t empty_loop_count = 0;
-void nfc_ftm_poll(void) {
+
+uint8_t nfc_ftm_poll(void) {
     /* Normal FTM mode - poll as fast as possible to avoid mailbox overflow */
     uint8_t remaining = 1;
     while (remaining) {
         remaining = ST25FTM_Runner();
     }
 
-    // check if we have started sending and then stopped recieving for a couple seconds
-    // if so, give up and reset the device
-    if (empty_loop_count > 400) {
-        resetHorizon = timerHigh + 50;
-    }
-
     /* Write any ready blocks */
-
     if (!g_rx.transferring) {
         delay(150);
+        return 2;
         //we add here as well and it'll turn off after 400 loops at 150ms each which is 60 seconds
-        empty_loop_count ++;
     } else {
         if (g_wait_after_response) {
-            empty_loop_count = 0;
             // we wait for at least 100ms after the response is sent then sleep for a bit
             delay(145);
             g_wait_after_response = false;
+            // a packet has been recieved so we are active
+            return 0;
         } else {
-            empty_loop_count++;
             delay(15);
+
         }
     }
+    return 1;
 }

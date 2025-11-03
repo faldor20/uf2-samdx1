@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 bool nfc_ftm_start(void);
-void nfc_ftm_poll(void);
+uint8_t nfc_ftm_poll(void);
 
 /* Ready sequence management for NFC tag signaling */
 void ST25FTM_SetReadySequence(void);

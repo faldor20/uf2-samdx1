@@ -346,10 +346,22 @@ __attribute__((used)) int main(void) {
     }
     
     // not enumerated yet
+    uint32_t empty_loop_count = 0;
     uint32_t count = 0;
     while (1) {
+         // check if we have started sending and then stopped recieving for a couple seconds
+        // if so, give up and reset the device
+        if (empty_loop_count > 200) {
+            resetIntoApp();
+        }
         /* NFC FTM cooperative runner */
-        nfc_ftm_poll();
+        uint8_t empty_tick =nfc_ftm_poll();
+        if (empty_tick==0) {
+            empty_loop_count = 0;
+        }else{
+            empty_loop_count+=empty_tick;
+        }
+
         if (count == 5) {
             count = 0;
             LED_MSC_TGL();
